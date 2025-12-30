@@ -56,3 +56,34 @@ Scaling notes
 
 - To scale to multiple tickers, run fetches concurrently using asyncio or background workers (Celery/RQ). Use caching and rate-limiting to avoid hitting Yahoo limits.
 - For production, move DB to a managed store (Postgres) and add migrations.
+
+
+Answers To Questions
+
+Q1 How would this scale to handle 10 tickers concurrently?
+
+Answer: To scale from a single one to 10 concurrent ones we should avoid sequential polling instead we should run the fetch operation using async I/O and a background scheluder like APIScheleduler or celery , then we would store the data into the SQLite db tagged by ticker then create a loop to fetch each one independently
+
+Why this fits the assignment:
+It preserves separation of concerns as expected in the architecture section on page 2 (no tangled single-file code).
+Behavior remains configurable (tickers list is just config, no code change) as required.
+
+Q2 How would you avoid API rate limits?
+
+Answer: According to the Yahoo finance usage I would do Batch request sending and Caching the results on a short TTL
+
+This aligns with the expectations to:
+Avoid API calls in tight loops
+Avoid calling the real API unnecessarily
+
+Q3 What’s the first architectural change for production?
+
+Answer: For a real world production environemnt we would have a queue 
+
+(fetcher service) --> (Redis/Kafka queue) --> (storage writer) --> (API server)
+
+Q4 What’s a trading-related pitfall using this setup as-is?
+
+Answer: The system is not suitable for live trading because Data can be old because we are using polling and There is no garuntee of latency or time synchronization and one missed or broken api call can cause wrong data on the user side we would need to add protections 
+
+
