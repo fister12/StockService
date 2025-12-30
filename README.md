@@ -103,10 +103,5 @@ Project layout
 
   ---
 
-  If you'd like, I can also:
-
-  - add example `curl`/Python snippets for each endpoint,
-  - update `README.md` with a short example of the created SQLite schema, or
-  - open a PR/commit the change for you.
 
 
