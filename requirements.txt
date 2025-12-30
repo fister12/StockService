@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+yfinance
+pydantic
+pydantic-settings
+pytest
+pandas
