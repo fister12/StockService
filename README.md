@@ -6,84 +6,107 @@ Project layout
 
 - app/: application package
   - `main.py`: FastAPI entrypoint and endpoints
-  - `fetcher.py`: yfinance interaction
-  - `storage.py`: SQLite/CSV helpers
-  - `config.py`: settings via pydantic
-- tests/: pytest unit tests
-- data/: runtime data files (DB/CSV)
+  # stock_service
 
-Quick start
+  A small FastAPI service that fetches stock OHLCV data using `yfinance` and persists it to SQLite (and optionally CSV).
 
+  ## Project layout
 
+  - `app/` — application package
+    - `main.py` — FastAPI entrypoint and endpoints
+    - `fetcher.py` — functions that call `yfinance`
+    - `storage.py` — helpers for SQLite/CSV persistence
+    - `config.py` — configuration using Pydantic
+  - `tests/` — pytest unit tests
+  - `data/` — runtime data files (DB/CSV)
+  - `images/` — example screenshots used in this README
 
-```
+  ## Quick start
 
-Docker
+  Prerequisites: Python 3.9+, Docker (optional)
 
-```bash
-docker build -t stock_service .
-docker run -p 8000:8000 stock_service
-```
+  Run with Docker:
 
-Tests
+  ```bash
+  docker build -t stock_service .
+  docker run -p 8000:8000 stock_service
+  ```
 
-```bash
-pytest -q
-```
+  Run locally (development):
 
-API Endpoints
+  ```bash
+  pip install -r requirements.txt
+  uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+  ```
 
-- `POST /fetch?ticker=TSLA&period=5d` : fetch OHLCV for the given ticker and persist to DB/CSV.
-- `GET /last` : returns the most-recent saved OHLCV row.
-- `GET /history?ticker=TSLA` : returns stored history (all tickers if `ticker` omitted).
+  Run tests:
 
-Images
+  ```bash
+  pytest -q
+  ```
 
-The following screenshots illustrate the UI and example responses for the main endpoints.
+  ## API Endpoints
 
-- ![Fetch request](images/Image-1Fetch.png)  Fetch form in Swagger UI
-- ![Fetch response](images/Image-2FetchResponse.png)  Example JSON response from `POST /fetch`
-- ![Last request](images/Image-3Last.png)  `GET /last` request in Swagger UI
-- ![Last response](images/Image-4LastResponse.png)  Example JSON response from `GET /last`
-- ![History request](images/Image-5History.png)  `GET /history` request in Swagger UI
-- ![History response](images/Image-6HistoryResponse.png)  Example JSON response from `GET /history`
-Decisions & Trade-offs
+  - `POST /fetch?ticker=TSLA&period=5d` — fetch OHLCV for the given `ticker` and persist to DB/CSV.
+  - `GET /last` — return the most-recent saved OHLCV row.
+  - `GET /history?ticker=TSLA` — return stored history (all tickers if `ticker` omitted).
 
-- SQLite chosen over CSV to ensure data integrity and to allow a UNIQUE constraint (`ticker`,`date`) to prevent duplicates and support efficient queries.
-- `yfinance.download` used for batch OHLCV retrieval and parsed into a normalized list of rows for DB insertion.
+  Example curl to fetch TSLA:
 
-Scaling notes
+  ```bash
+  curl -X POST "http://localhost:8000/fetch?ticker=TSLA&period=5d"
+  ```
 
-- To scale to multiple tickers, run fetches concurrently using asyncio or background workers (Celery/RQ). Use caching and rate-limiting to avoid hitting Yahoo limits.
-- For production, move DB to a managed store (Postgres) and add migrations.
+  ## Images
 
+  Screenshots showing Swagger UI and example responses:
 
-Answers To Questions
+  - ![Fetch request](images/Image-1Fetch.png) — Fetch form in Swagger UI
+  - ![Fetch response](images/Image-2FetchResponse.png) — Example JSON response from `POST /fetch`
+  - ![Last request](images/Image-3Last.png) — `GET /last` in Swagger UI
+  - ![Last response](images/Image-4LastResponse.png) — Example JSON response from `GET /last`
+  - ![History request](images/Image-5History.png) — `GET /history` in Swagger UI
+  - ![History response](images/Image-6HistoryResponse.png) — Example JSON response from `GET /history`
 
-Q1 How would this scale to handle 10 tickers concurrently?
+  ## Decisions & trade-offs
 
-Answer: To scale from a single one to 10 concurrent ones we should avoid sequential polling instead we should run the fetch operation using async I/O and a background scheluder like APIScheleduler or celery , then we would store the data into the SQLite db tagged by ticker then create a loop to fetch each one independently
+  - SQLite is used by default for simplicity and data integrity; a UNIQUE constraint on (`ticker`, `date`) prevents duplicate rows.
+  - `yfinance.download` is used for batch OHLCV retrieval and data is normalized before insertion.
 
-Why this fits the assignment:
-It preserves separation of concerns as expected in the architecture section on page 2 (no tangled single-file code).
-Behavior remains configurable (tickers list is just config, no code change) as required.
+  ## Scaling notes
 
-Q2 How would you avoid API rate limits?
+  - For multiple tickers or higher throughput, run fetches concurrently (asyncio or background workers such as Celery/RQ) and avoid synchronous loops.
+  - Use caching and rate-limiting to reduce external API calls to Yahoo Finance.
+  - For production, migrate to a managed database (Postgres) and add proper migrations.
 
-Answer: According to the Yahoo finance usage I would do Batch request sending and Caching the results on a short TTL
+  ## Common questions
 
-This aligns with the expectations to:
-Avoid API calls in tight loops
-Avoid calling the real API unnecessarily
+  Q: How would this scale to handle 10 tickers concurrently?
 
-Q3 What’s the first architectural change for production?
+  A: Implement concurrent fetching (async tasks or worker pool). Use a scheduler or background worker to queue fetch jobs and write results to the DB concurrently. Keep the fetching code idempotent and add retries/backoff.
 
-Answer: For a real world production environemnt we would have a queue 
+  Q: How would you avoid API rate limits?
 
-(fetcher service) --> (Redis/Kafka queue) --> (storage writer) --> (API server)
+  A: Batch requests where possible, add short-term caching (TTL), and stagger requests. Respect the provider's rate limits and implement exponential backoff for retries.
 
-Q4 What’s a trading-related pitfall using this setup as-is?
+  Q: What’s the first architectural change for production?
 
-Answer: The system is not suitable for live trading because Data can be old because we are using polling and There is no garuntee of latency or time synchronization and one missed or broken api call can cause wrong data on the user side we would need to add protections 
+  A: Move persistence to a managed DB and separate responsibilities with a queue:
+
+  ```
+  (fetcher service) --> (Redis/Kafka queue) --> (storage writer) --> (API server)
+  ```
+
+  Q: What’s a trading-related pitfall using this setup as-is?
+
+  A: This setup uses polling and is not suitable for low-latency trading. There is no guarantee of real-time data, time synchronization, or delivery guarantees. Add monitoring, retries, and stronger guarantees before using in trading-critical systems.
+
+  ---
+
+  If you'd like, I can also:
+
+  - add example `curl`/Python snippets for each endpoint,
+  - update `README.md` with a short example of the created SQLite schema, or
+  - open a PR/commit the change for you.
 
 
