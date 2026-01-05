@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 from .config import settings
-from .fetcher import fetch_stock_data, FetchError
+from .fetcher import fetch_stock_data, FetchError , fetch_multiple_stocks
 from . import storage
 
 app = FastAPI(title="stock_service")
@@ -26,6 +26,14 @@ async def fetch_and_store(ticker: str = Query(..., description="Ticker symbol"),
     storage.save_quote_to_csv(settings.CSV_PATH, rows)
     return JSONResponse(content={"ticker": ticker.upper(), "fetched": len(rows), "inserted": inserted})
 
+@app.post("/fetch-multiple")
+async def fetch_multiple(tickers: List[str] = Query(... , description="List of tickers" ), period: str="5d" , interval: str = "1d"):
+    """Fetch OHLCV data for multiple tickers"""
+    try:
+        rows = fetch_multiple_stocks(tickers , period=period , interval=interval)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return JSONResponse(content={"fetched":len(rows) , "data":rows})
 
 @app.get("/last")
 async def last_saved():

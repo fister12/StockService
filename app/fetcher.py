@@ -46,3 +46,14 @@ def fetch_stock_data(ticker: str, period: str = "5d", interval: str = "1d") -> L
             }
         )
     return rows
+
+def fetch_multiple_stocks(tickers: List[str], period: str = "5d", interval: str = "1d") -> List[Dict]:
+    """Fetch OHLCV data for multiple tickers for amking graphs on the frontend"""
+    all_data: List[Dict] = []
+    for tickers in tickers:
+        try:
+            data = fetch_stock_data(tickers , period="5d" , interval = "1d")
+            all_data.extend(data)
+        except FetchError:
+            continue
+    return all_data   
